@@ -1,20 +1,25 @@
-const express = require("express")
-const dotenv = require("dotenv")
+const express = require("express");
+const dotenv = require("dotenv");
+const path = require("path");
 
-dotenv.config()
+dotenv.config();
 
 const app = express();
-const PORT = 3000;
 
 app.use(express.json());
-app.use(express.static("public"));
+app.use(express.urlencoded({ extended: true }));
 
+// Menampilkan file frontend
+app.use(express.static(path.join(__dirname, "public")));
+
+// Halaman utama
 app.get("/", (req, res) => {
-    res.redirect("/index.html");
+    res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
+// API Chatbot
 app.post("/api/chat", async (req, res) => {
-    try{
+    try {
         const messages = req.body.messages;
 
         if (!messages || !Array.isArray(messages)) {
@@ -23,16 +28,20 @@ app.post("/api/chat", async (req, res) => {
             });
         }
 
+        if (!process.env.OPENROUTER_API_KEY) {
+            return res.status(500).json({
+                error: "OPENROUTER_API_KEY belum dikonfigurasi"
+            });
+        }
+
         const response = await fetch(
             "https://openrouter.ai/api/v1/chat/completions",
             {
                 method: "POST",
-
                 headers: {
                     "Content-Type": "application/json",
                     "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`
                 },
-
                 body: JSON.stringify({
                     model: "inclusionai/ling-3.2-flash:free",
                     messages: messages,
@@ -43,7 +52,7 @@ app.post("/api/chat", async (req, res) => {
             }
         );
 
-        if(!response.ok) {
+        if (!response.ok) {
             const errorData = await response.text();
 
             console.error("OpenRouter Error:", errorData);
@@ -53,7 +62,7 @@ app.post("/api/chat", async (req, res) => {
             });
         }
 
-        //Header untuk streaming
+        // Header streaming
         res.setHeader("Content-Type", "text/event-stream");
         res.setHeader("Cache-Control", "no-cache");
         res.setHeader("Connection", "keep-alive");
@@ -66,58 +75,43 @@ app.post("/api/chat", async (req, res) => {
         while (true) {
             const { done, value } = await reader.read();
 
-            if (done) {
-                break;
-            }
+            if (done) break;
 
             buffer += decoder.decode(value, {
                 stream: true
             });
 
             const lines = buffer.split("\n");
-
-            // Simpan bagian terakhir karena mungkin belum lengkap
             buffer = lines.pop();
 
             for (const line of lines) {
-
                 const trimmedLine = line.trim();
 
-                if (!trimmedLine) {
-                    continue;
-                }
-
-                if (!trimmedLine.startsWith("data:")) {
-                    continue;
-                }
+                if (!trimmedLine.startsWith("data:")) continue;
 
                 const data = trimmedLine.slice(5).trim();
 
-                if (data === "[DONE]") {
-                    continue;
-                }
+                if (data === "[DONE]") continue;
 
                 try {
-                    
                     const json = JSON.parse(data);
-
                     const content = json.choices?.[0]?.delta?.content;
 
                     if (content) {
-                        res.write(`data: ${JSON.stringify(content)}\n\n`);
+                        res.write(
+                            `data: ${JSON.stringify(content)}\n\n`
+                        );
                     }
                 } catch (error) {
-                    console.error(
-                        "Gagal parsing streaming data:", error
-                    );
+                    console.error("Gagal parsing streaming data:", error);
                 }
             }
         }
-        
+
         res.write("data: [DONE]\n\n");
         res.end();
-    } catch (error) {
 
+    } catch (error) {
         console.error("Server Error:", error);
 
         if (!res.headersSent) {
@@ -125,17 +119,19 @@ app.post("/api/chat", async (req, res) => {
                 error: "Terjadi kesalahan pada server"
             });
         } else {
-            res.write(
-                `data: ${JSON.stringify(
-                    "Terjadi kesalahan pada server"
-                )}\n\n`
-            );
-
             res.end();
         }
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Server berjalan di http://localhost:${PORT}`);
-});
+// Export untuk Vercel
+module.exports = app;
+
+// Jalankan server secara lokal
+if (require.main === module) {
+    const PORT = process.env.PORT || 3000;
+
+    app.listen(PORT, () => {
+        console.log(`Server berjalan di http://localhost:${PORT}`);
+    });
+}
