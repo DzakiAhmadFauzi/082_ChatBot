@@ -114,4 +114,6 @@ app.post("/api/chat", async (req, res) => {
             }
         }
         
-        
+        res.write("data: [DONE]\n\n");
+        res.end();
+    } 
