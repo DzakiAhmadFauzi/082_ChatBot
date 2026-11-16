@@ -28,4 +28,9 @@ app.post("/api/chat", async (req, res) => {
             {
                 method: "POST",
 
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`
+                },
+
                 
