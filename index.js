@@ -74,4 +74,9 @@ app.post("/api/chat", async (req, res) => {
                 stream: true
             });
 
+            const lines = buffer.split("\n");
+
+            // Simpan bagian terakhir karena mungkin belum lengkap
+            buffer = lines.pop();
+
             
