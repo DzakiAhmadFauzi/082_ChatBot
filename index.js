@@ -14,5 +14,7 @@ app.get("/", (req, res) => {
 });
 
 app.post("/api/chat", async (req, res) => {
-    
-});
+    try{
+        const messages = req.body.messages;
+
+        
